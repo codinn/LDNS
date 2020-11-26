@@ -7,15 +7,15 @@ if [ $# == 0 ]; then
     exit 1
 fi
 
-if [ ! -d lib ]; then
-    echo "Please run build-libssl.sh first!"
+if [ ! -d build/lib ]; then
+    echo "Please run build-ldns.sh first!"
     exit 1
 fi
 
 BUILD_TYPE=$1
-FWNAME=openssl-apple
-FWROOT=frameworks
-LIBNAME=openssl
+FWNAME=ldns-apple
+FWROOT=build/frameworks
+LIBNAME=ldns
 ARGS=
 XCFRAMEWORK_DEPS=
 
@@ -33,29 +33,24 @@ fi
 for SYS in ${ALL_SYSTEMS[@]}; do
     echo "Creating universal static libraries for $SYS"
     SYSDIR="$FWROOT/$SYS"
-	SYSDISTS=(bin/${SYS}*)
+	SYSDISTS=(build/bin/${SYS}*)
 	LIPO_LIBS=
-    LIPO_SSL_LIBS=
-    LIPO_CRYPTO_LIBS=
 
 	mkdir -p $SYSDIR
     for DIST in ${SYSDISTS[@]}; do
-    	libtool -static -o $DIST/lib/libopenssl.a $DIST/lib/libcrypto.a $DIST/lib/libssl.a
-    	LIPO_LIBS+=" $DIST/lib/libopenssl.a"
-        LIPO_SSL_LIBS+=" $DIST/lib/libssl.a"
-        LIPO_CRYPTO_LIBS+=" $DIST/lib/libcrypto.a"
+    	LIPO_LIBS+=" $DIST/lib/libldns.a"
     done
 
-    lipo ${LIPO_SSL_LIBS} -create -output $SYSDIR/libssl.a
-    lipo ${LIPO_CRYPTO_LIBS} -create -output $SYSDIR/libcrypto.a
-	lipo ${LIPO_LIBS} -create -output $SYSDIR/libopenssl.a
-	ARGS+=" -library $SYSDIR/libopenssl.a -headers include/"
-	XCFRAMEWORK_DEPS+=" $SYSDIR/libopenssl.a"
+	lipo ${LIPO_LIBS} -create -output $SYSDIR/libldns.a
+	ARGS+=" -library $SYSDIR/libldns.a -headers build/include/"
+	XCFRAMEWORK_DEPS+=" $SYSDIR/libldns.a"
 done
 
 echo "Creating xcframework"
 xcodebuild -create-xcframework $ARGS -output "$FWROOT/$FWNAME.xcframework"
 
-echo "Packing and computing checksum"
+echo "Packing …"
 zip -rq "$FWROOT/$FWNAME.xcframework.zip" "$FWROOT/$FWNAME.xcframework"
-swift package compute-checksum $FWROOT/$FWNAME.xcframework.zip
+# echo "Computing checksum …"
+# swift package compute-checksum $FWROOT/$FWNAME.xcframework.zip
+echo "Done"
