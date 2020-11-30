@@ -26,53 +26,64 @@ set -u
 
 # Default version in case no version is specified
 DEFAULTVERSION="1.7.1"
+VERSION=
+PARALLEL=
 
 # Init optional env variables (use available variable or default to empty string)
 CURL_OPTIONS="${CURL_OPTIONS:-}"
 CONFIG_OPTIONS="${CONFIG_OPTIONS:-}"
 
-echo_help()
-{
-  echo "Usage: $0 [options...]"
-  echo "Generic options"
-  echo "     --cleanup                     Clean up build directories (bin, include/ldns, lib, src) before starting build"
-  echo " -h, --help                        Print help (this message)"
-  echo "     --ios-sdk=SDKVERSION          Override iOS SDK version"
-  echo "     --macos-sdk=SDKVERSION        Override macOS SDK version"
-  echo "     --catalyst-sdk=SDKVERSION     Override macOS SDK version for Catalyst"
-  echo "     --watchos-sdk=SDKVERSION      Override watchOS SDK version"
-  echo "     --tvos-sdk=SDKVERSION         Override tvOS SDK version"
-  echo "     --min-ios-sdk=SDKVERSION      Set minimum iOS SDK version"
-  echo "     --min-macos-sdk=SDKVERSION    Set minimum macOS SDK version"
-  echo "     --min-watchos-sdk=SDKVERSION  Set minimum watchOS SDK version"
-  echo "     --min-tvos-sdk=SDKVERSION     Set minimum tvOS SDK version"
+extra_help() {
   echo "     --noparallel                  Disable running make with parallel jobs (make -j)"
-  echo " -v, --verbose                     Enable verbose logging"
-  echo "     --verbose-on-error            Dump last 500 lines from log file if an error occurs (for Travis builds)"
   echo "     --version=VERSION             LDNS version to build (defaults to ${DEFAULTVERSION})"
-  echo "     --targets=\"TARGET TARGET ...\" Space-separated list of build targets"
-  echo "                                     Options: ${DEFAULTTARGETS}"
   echo
-  echo "For custom configure options, set variable CONFIG_OPTIONS"
   echo "For custom cURL options, set variable CURL_OPTIONS"
   echo "  Example: CURL_OPTIONS=\"--proxy 192.168.1.1:8080\" ./build-ldns.sh"
 }
 
-spinner()
-{
-  local pid=$!
-  local delay=0.75
-  local spinstr='|/-\'
-  while [ "$(ps a | awk '{print $1}' | grep $pid)" ]; do
-    local temp=${spinstr#?}
-    printf "  [%c]" "$spinstr"
-    local spinstr=$temp${spinstr%"$temp"}
-    sleep $delay
-    printf "\b\b\b\b\b"
-  done
+extra_argument() {
+  local ARG=$1
+  case ${ARG} in
+    --noparallel)
+      PARALLEL="false"
+      ;;
+    --version=*)
+      VERSION="${i#*=}"
+      shift
+      ;;
+    *)
+      echo "Unknown argument: ${i}"
+      ;;
+  esac
+}
 
-  wait $pid
-  return $?
+did_process_arguments() {
+  if [ -z "${VERSION}" ]; then
+    VERSION="${DEFAULTVERSION}"
+  fi
+
+  # Determine number of cores for (parallel) build
+  BUILD_THREADS=1
+  if [ "${PARALLEL}" != "false" ]; then
+    BUILD_THREADS=$(sysctl hw.ncpu | awk '{print $2}')
+  fi
+}
+
+cleanup_build()
+{
+  # Clean up target directories if requested and present
+  if [ -d "${CURRENTPATH}/build/bin" ]; then
+    rm -rfd "${CURRENTPATH}/build/bin"
+  fi
+  if [ -d "${CURRENTPATH}/build/include/ldns" ]; then
+    rm -rfd "${CURRENTPATH}/build/include/ldns"
+  fi
+  if [ -d "${CURRENTPATH}/build/lib" ]; then
+    rm -rfd "${CURRENTPATH}/build/lib"
+  fi
+  if [ -d "${CURRENTPATH}/build/src" ]; then
+    rm -rfd "${CURRENTPATH}/build/src"
+  fi
 }
 
 # Prepare target and source dir in build loop
@@ -93,28 +104,6 @@ prepare_target_source_dirs()
   cp -R ${CURRENTPATH}/ldns ${SOURCEDIR}
   cd "${SOURCEDIR}/ldns"
   chmod u+x ./configure
-}
-
-# Check for error status
-check_status()
-{
-  local STATUS=$1
-  local COMMAND=$2
-
-  if [ "${STATUS}" != 0 ]; then
-    if [[ "${LOG_VERBOSE}" != "verbose"* ]]; then
-      echo "Problem during ${COMMAND} - Please check ${LOG}"
-    fi
-
-    # Dump last 500 lines from log file for verbose-on-error
-    if [ "${LOG_VERBOSE}" == "verbose-on-error" ]; then
-      echo "Problem during ${COMMAND} - Dumping last 500 lines from log file"
-      echo
-      tail -n 500 "${LOG}"
-    fi
-
-    exit 1
-  fi
 }
 
 # Run Configure in build loop
@@ -174,35 +163,7 @@ finish_build_loop()
   cd "${CURRENTPATH}"
   rm -r "${SOURCEDIR}"
 
-  # Add references to library files to relevant arrays
-  if [[ "${PLATFORM}" == iPhone* ]]; then
-    LIBLDNS_IOS+=("${TARGETDIR}/lib/libldns.a")
-    if [[ "${PLATFORM}" == iPhoneSimulator* ]]; then
-      LDNSCONF_SUFFIX="ios_sim_${ARCH}"
-    else
-      LDNSCONF_SUFFIX="ios_${ARCH}"
-    fi
-  elif [[ "${PLATFORM}" == Watch* ]]; then
-    LIBLDNS_WATCHOS+=("${TARGETDIR}/lib/libldns.a")
-    if [[ "${PLATFORM}" == WatchSimulator* ]]; then
-      LDNSCONF_SUFFIX="watchos_sim_${ARCH}"
-    else
-      LDNSCONF_SUFFIX="watchos_${ARCH}"
-    fi
-  elif [[ "${PLATFORM}" == AppleTV* ]]; then
-    LIBLDNS_TVOS+=("${TARGETDIR}/lib/libldns.a")
-    if [[ "${PLATFORM}" == AppleTVSimulator* ]]; then
-      LDNSCONF_SUFFIX="tvos_sim_${ARCH}"
-    else
-      LDNSCONF_SUFFIX="tvos_${ARCH}"
-    fi
-  elif [[ "${PLATFORM}" == Catalyst* ]]; then
-    LIBLDNS_CATALYST+=("${TARGETDIR}/lib/libldns.a")
-    LDNSCONF_SUFFIX="catalyst_${ARCH}"
-  else
-    LIBLDNS_MACOS+=("${TARGETDIR}/lib/libldns.a")
-    LDNSCONF_SUFFIX="macos_${ARCH}"
-  fi
+  LDNSCONF_SUFFIX="${PLATFORM}_${ARCH}"
 
   # Copy common.h to bin directory and add to array
   LDNSCONF="common_${LDNSCONF_SUFFIX}.h"
@@ -214,100 +175,6 @@ finish_build_loop()
     INCLUDE_DIR="${TARGETDIR}/include/ldns"
   fi
 }
-
-# Init optional command line vars
-ARCHS=""
-CLEANUP=""
-IOS_SDKVERSION=""
-MACOS_SDKVERSION=""
-CATALYST_SDKVERSION=""
-WATCHOS_SDKVERSION=""
-TVOS_SDKVERSION=""
-LOG_VERBOSE=""
-PARALLEL=""
-TARGETS=""
-VERSION=""
-
-# Process command line arguments
-for i in "$@"
-do
-case $i in
-  --cleanup)
-    CLEANUP="true"
-    ;;
-  -h|--help)
-    echo_help
-    exit
-    ;;
-  --ios-sdk=*)
-    IOS_SDKVERSION="${i#*=}"
-    shift
-    ;;
-  --macos-sdk=*)
-    MACOS_SDKVERSION="${i#*=}"
-    shift
-    ;;
-  --catalyst-sdk=*)
-    CATALYST_SDKVERSION="${i#*=}"
-    shift
-    ;;
-  --watchos-sdk=*)
-    WATCHOS_SDKVERSION="${i#*=}"
-    shift
-    ;;
-  --tvos-sdk=*)
-    TVOS_SDKVERSION="${i#*=}"
-    shift
-    ;;
-  --min-ios-sdk=*)
-    IOS_MIN_SDK_VERSION="${i#*=}"
-    shift
-    ;;
-  --min-macos-sdk=*)
-    MACOS_MIN_SDK_VERSION="${i#*=}"
-    shift
-    ;;
-  --min-watchos-sdk=*)
-    WATCHOS_MIN_SDK_VERSION="${i#*=}"
-    shift
-    ;;
-  --min-tvos-sdk=*)
-    TVOS_MIN_SDK_VERSION="${i#*=}"
-    shift
-    ;;
-  --noparallel)
-    PARALLEL="false"
-    ;;
-  --targets=*)
-    TARGETS="${i#*=}"
-    shift
-    ;;
-  -v|--verbose)
-    LOG_VERBOSE="verbose"
-    ;;
-  --verbose-on-error)
-    LOG_VERBOSE="verbose-on-error"
-    ;;
-  --version=*)
-    VERSION="${i#*=}"
-    shift
-    ;;
-  *)
-    echo "Unknown argument: ${i}"
-    ;;
-esac
-done
-
-# Don't mix version and branch
-if [ -z "${VERSION}" ]; then
-  VERSION="${DEFAULTVERSION}"
-fi
-
-# Determine number of cores for (parallel) build
-BUILD_THREADS=1
-if [ "${PARALLEL}" != "false" ]; then
-  BUILD_THREADS=$(sysctl hw.ncpu | awk '{print $2}')
-fi
 
 # Determine script directory
 SCRIPTDIR=$(cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd)
@@ -321,6 +188,8 @@ case "${CURRENTPATH}" in
   ;;
 esac
 cd "${CURRENTPATH}"
+
+source "${CURRENTPATH}/apple-config.sh"
 
 # Show build options
 echo
@@ -363,22 +232,6 @@ echo
 # -o pipefail  Causes a pipeline to return the exit status of the last command in the pipe that returned a non-zero return value
 set -eo pipefail
 
-# Clean up target directories if requested and present
-if [ "${CLEANUP}" == "true" ]; then
-  if [ -d "${CURRENTPATH}/build/bin" ]; then
-    rm -r "${CURRENTPATH}/build/bin"
-  fi
-  if [ -d "${CURRENTPATH}/build/include/ldns" ]; then
-    rm -r "${CURRENTPATH}/build/include/ldns"
-  fi
-  if [ -d "${CURRENTPATH}/build/lib" ]; then
-    rm -r "${CURRENTPATH}/build/lib"
-  fi
-  if [ -d "${CURRENTPATH}/build/src" ]; then
-    rm -r "${CURRENTPATH}/build/src"
-  fi
-fi
-
 # (Re-)create target directories
 mkdir -p "${CURRENTPATH}/build/bin"
 mkdir -p "${CURRENTPATH}/build/lib"
@@ -387,11 +240,8 @@ mkdir -p "${CURRENTPATH}/build/src"
 # Init vars for library references
 INCLUDE_DIR=""
 LDNSCONF_ALL=()
-LIBLDNS_IOS=()
-LIBLDNS_MACOS=()
-LIBLDNS_CATALYST=()
-LIBLDNS_WATCHOS=()
-LIBLDNS_TVOS=()
+
+bootstrap
 
 source "${SCRIPTDIR}/apple-config.sh"
 
@@ -415,51 +265,7 @@ if [ ${#LDNSCONF_ALL[@]} -gt 1 ]; then
     cp "${CURRENTPATH}/build/bin/${LDNSCONF_CURRENT}" "${CURRENTPATH}/build/include/ldns"
 
     # Determine define condition
-    case "${LDNSCONF_CURRENT}" in
-      *_ios_arm64.h)
-        DEFINE_CONDITION="TARGET_OS_IOS && TARGET_OS_EMBEDDED && TARGET_CPU_ARM64"
-      ;;
-      *_ios_arm64e.h)
-        DEFINE_CONDITION="TARGET_OS_IOS && TARGET_OS_EMBEDDED && TARGET_CPU_ARM64E"
-      ;;
-      *_ios_sim_x86_64.h)
-        DEFINE_CONDITION="TARGET_OS_IOS && TARGET_OS_SIMULATOR && TARGET_CPU_X86_64"
-      ;;
-      *_ios_sim_arm64.h)
-        DEFINE_CONDITION="TARGET_OS_IOS && TARGET_OS_SIMULATOR && TARGET_CPU_ARM64"
-      ;;
-      *_macos_x86_64.h)
-        DEFINE_CONDITION="TARGET_OS_OSX && TARGET_CPU_X86_64"
-      ;;
-      *_macos_arm64.h)
-        DEFINE_CONDITION="TARGET_OS_OSX && TARGET_CPU_ARM64"
-      ;;
-      *_catalyst_x86_64.h)
-        DEFINE_CONDITION="(TARGET_OS_MACCATALYST || (TARGET_OS_IOS && TARGET_OS_SIMULATOR)) && TARGET_CPU_X86_64"
-      ;;
-      *_catalyst_arm64.h)
-        DEFINE_CONDITION="(TARGET_OS_MACCATALYST || (TARGET_OS_IOS && TARGET_OS_SIMULATOR)) && TARGET_CPU_ARM64"
-      ;;
-      *_watchos_armv7k.h)
-        DEFINE_CONDITION="TARGET_OS_WATCHOS && TARGET_OS_EMBEDDED && TARGET_CPU_ARMV7K"
-      ;;
-      *_watchos_arm64_32.h)
-        DEFINE_CONDITION="TARGET_OS_WATCHOS && TARGET_OS_EMBEDDED && TARGET_CPU_ARM64_32"
-      ;;
-      *_watchos_sim_x86_64.h)
-        DEFINE_CONDITION="TARGET_OS_SIMULATOR && TARGET_CPU_X86_64 || TARGET_OS_EMBEDDED"
-      ;;
-      *_tvos_arm64.h)
-        DEFINE_CONDITION="TARGET_OS_TV && TARGET_OS_EMBEDDED && TARGET_CPU_ARM64"
-      ;;
-      *_tvos_sim_x86_64.h)
-        DEFINE_CONDITION="TARGET_OS_TV && TARGET_OS_SIMULATOR && TARGET_CPU_X86_64"
-      ;;
-      *)
-        # Don't run into unexpected cases by setting the default condition to false
-        DEFINE_CONDITION="0"
-      ;;
-    esac
+    define_condition ${LDNSCONF_CURRENT}
 
     # Determine loopcount; start with if and continue with elif
     LOOPCOUNT=$((LOOPCOUNT + 1))
