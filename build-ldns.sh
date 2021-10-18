@@ -84,6 +84,9 @@ cleanup_build()
   if [ -d "${CURRENTPATH}/build/src" ]; then
     rm -rfd "${CURRENTPATH}/build/src"
   fi
+  if [ -d "${CURRENTPATH}/build/frameworks" ]; then
+    rm -rfd "${CURRENTPATH}/build/frameworks"
+  fi
 }
 
 # Prepare target and source dir in build loop

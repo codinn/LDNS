@@ -338,6 +338,7 @@ do
 case $i in
   --cleanup)
     cleanup_build
+    exit
     ;;
   -h|--help)
     echo_help

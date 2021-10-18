@@ -13,7 +13,7 @@ if [ ! -d build/lib ]; then
 fi
 
 BUILD_TYPE=$1
-FWNAME=ldns-apple
+FWNAME=ldns
 FWROOT=build/frameworks
 LIBNAME=ldns
 ARGS=
@@ -50,7 +50,7 @@ echo "Creating xcframework"
 xcodebuild -create-xcframework $ARGS -output "$FWROOT/$FWNAME.xcframework"
 
 echo "Packing …"
-zip -rq "$FWROOT/$FWNAME.xcframework.zip" "$FWROOT/$FWNAME.xcframework"
-# echo "Computing checksum …"
-# swift package compute-checksum $FWROOT/$FWNAME.xcframework.zip
+ditto -c -k --keepParent "$FWROOT/$FWNAME.xcframework" "$FWROOT/$FWNAME.xcframework.zip"
+echo "Computing checksum …"
+swift package compute-checksum $FWROOT/$FWNAME.xcframework.zip
 echo "Done"
