@@ -20,6 +20,24 @@
 #  limitations under the License.
 #
 
+# Default (=full) set of targets
+DEFAULTTARGETS=`cat <<TARGETS
+ios-sim-cross-x86_64 ios-sim-cross-arm64 ios64-cross-arm64 ios64-cross-arm64e
+macos64-x86_64 macos64-arm64
+mac-catalyst-x86_64 mac-catalyst-arm64
+watchos-cross-armv7k watchos-cross-arm64_32 watchos-sim-cross-x86_64 watchos-sim-cross-i386 watchos-sim-cross-arm64
+tvos-sim-cross-x86_64 tvos-sim-cross-arm64 tvos-cross-arm64
+xros-sim-cross-arm64 xros-cross-arm64
+TARGETS`
+
+# Minimum iOS/tvOS SDK version to build for
+IOS_MIN_SDK_VERSION="12.0"
+MACOS_MIN_SDK_VERSION="11.0"
+CATALYST_MIN_SDK_VERSION="11.0"
+WATCHOS_MIN_SDK_VERSION="4.0"
+TVOS_MIN_SDK_VERSION="12.0"
+XROS_MIN_SDK_VERSION="1.0"
+
 isFunction() { declare -Ff "$1" >/dev/null; }
 
 echo_help()
@@ -33,6 +51,7 @@ echo_help()
   echo "     --catalyst-sdk=SDKVERSION     Override macOS SDK version for Catalyst"
   echo "     --watchos-sdk=SDKVERSION      Override watchOS SDK version"
   echo "     --tvos-sdk=SDKVERSION         Override tvOS SDK version"
+  echo "     --xros-sdk=SDKVERSION         Override xrOS SDK version"
   echo "     --min-ios-sdk=SDKVERSION      Set minimum iOS SDK version"
   echo "     --min-macos-sdk=SDKVERSION    Set minimum macOS SDK version"
   echo "     --min-watchos-sdk=SDKVERSION  Set minimum watchOS SDK version"
@@ -121,19 +140,34 @@ define_condition()
       DEFINE_CONDITION="(TARGET_OS_MACCATALYST || (TARGET_OS_IOS && TARGET_OS_SIMULATOR)) && TARGET_CPU_ARM64"
     ;;
     *_WatchOS_armv7k.h)
-      DEFINE_CONDITION="TARGET_OS_WATCHOS && TARGET_OS_EMBEDDED && TARGET_CPU_ARMV7K"
+      DEFINE_CONDITION="TARGET_OS_WATCH && TARGET_OS_EMBEDDED && TARGET_CPU_ARM"
     ;;
     *_WatchOS_arm64_32.h)
-      DEFINE_CONDITION="TARGET_OS_WATCHOS && TARGET_OS_EMBEDDED && TARGET_CPU_ARM64_32"
+      DEFINE_CONDITION="TARGET_OS_WATCH && TARGET_OS_EMBEDDED && TARGET_CPU_ARM64"
     ;;
-    *_WatchOS_sim_x86_64.h)
-      DEFINE_CONDITION="TARGET_OS_SIMULATOR && TARGET_CPU_X86_64 || TARGET_OS_EMBEDDED"
+    *_WatchSimulator_x86_64.h)
+      DEFINE_CONDITION="TARGET_OS_WATCH && TARGET_OS_SIMULATOR && TARGET_CPU_X86_64"
+    ;;
+    *_WatchSimulator_arm64.h)
+      DEFINE_CONDITION="TARGET_OS_WATCH && TARGET_OS_SIMULATOR && TARGET_CPU_ARM64"
+    ;;
+    *_WatchSimulator_i386.h)
+      DEFINE_CONDITION="TARGET_OS_WATCH && TARGET_OS_SIMULATOR && TARGET_CPU_X86"
     ;;
     *_AppleTVOS_arm64.h)
       DEFINE_CONDITION="TARGET_OS_TV && TARGET_OS_EMBEDDED && TARGET_CPU_ARM64"
     ;;
+    *_AppleTVSimulator_arm64.h)
+      DEFINE_CONDITION="TARGET_OS_TV && TARGET_OS_SIMULATOR && TARGET_CPU_ARM64"
+    ;;
     *_AppleTVSimulator_x86_64.h)
       DEFINE_CONDITION="TARGET_OS_TV && TARGET_OS_SIMULATOR && TARGET_CPU_X86_64"
+    ;;
+    *_XRSimulator_arm64.h)
+      DEFINE_CONDITION="TARGET_OS_VISION && TARGET_OS_SIMULATOR && TARGET_CPU_ARM64"
+    ;;
+    *_XROS_arm64.h)
+      DEFINE_CONDITION="TARGET_OS_VISION && TARGET_CPU_ARM64"
     ;;
     *)
       # Don't run into unexpected cases by setting the default condition to false
@@ -142,6 +176,7 @@ define_condition()
   esac
 }
 
+# Reference: https://github.com/passepartoutvpn/openssl-apple/blob/master/config/20-all-platforms.conf
 function generate_apple_envs() {
   TARGET=$1
   # Extract ARCH from TARGET (part after last dash)
@@ -153,10 +188,6 @@ function generate_apple_envs() {
   # Determine relevant SDK version and platform
   if [[ "${TARGET}" == macos* ]]; then
     ## Apple macOS
-    if [ -z ${MACOS_MIN_SDK_VERSION+x} ]; then
-      MACOS_MIN_SDK_VERSION="10.13"
-    fi
-
     if [ ! -n "${MACOS_SDKVERSION}" ]; then
       MACOS_SDKVERSION=$(xcrun -sdk macosx --show-sdk-version)
     fi
@@ -168,7 +199,6 @@ function generate_apple_envs() {
     SDKVERSION="${MACOS_SDKVERSION}"
     PLATFORM="MacOSX"
     if [[ "${TARGET}" == "macos64-arm64" ]]; then
-      MACOS_MIN_SDK_VERSION="11.0"
       CONFIG_HOST="arm-apple-darwin"
     else
       CONFIG_HOST="x86_64-apple-darwin"
@@ -179,12 +209,7 @@ function generate_apple_envs() {
     SDK_CFLAGS="-mmacosx-version-min=${MACOS_MIN_SDK_VERSION}"
 
   elif [[ "${TARGET}" == mac-catalyst-* ]]; then
-
     # Catalyst
-    if [ -z ${CATALYST_MIN_SDK_VERSION+x} ]; then
-      CATALYST_MIN_SDK_VERSION="10.15"
-    fi
-
     if [ ! -n "${CATALYST_SDKVERSION}" ]; then
       CATALYST_SDKVERSION=$(xcrun -sdk macosx --show-sdk-version)
     fi
@@ -200,75 +225,97 @@ function generate_apple_envs() {
     # CFLAGS
     if [[ "${TARGET}" == "mac-catalyst-x86_64" ]]; then
       # Catalyst (x86_64)
-      SDK_CFLAGS="-target x86_64-apple-ios13.0-macabi -mios-version-min=13.0"
+      SDK_CFLAGS="-target x86_64-apple-ios14.0-macabi -mios-version-min=14.0"
       CONFIG_HOST="x86_64-apple-darwin"
     else
       # Catalyst (arm64)
-      SDK_CFLAGS="-target arm64-apple-ios13.0-macabi -mios-version-min=13.0"
+      SDK_CFLAGS="-target arm64-apple-ios14.0-macabi -mios-version-min=14.0"
       CONFIG_HOST="arm-apple-darwin"
     fi
 
   elif [[ "${TARGET}" == watchos* ]]; then
     # watchOS cross
-    if [ -z ${WATCHOS_MIN_SDK_VERSION+x} ]; then
-      WATCHOS_MIN_SDK_VERSION="4.0"
-    fi
-
     if [ ! -n "${WATCHOS_SDKVERSION}" ]; then
       WATCHOS_SDKVERSION=$(xcrun -sdk watchos --show-sdk-version)
     fi
+    
     SDKVERSION="${WATCHOS_SDKVERSION}"
-    if [[ "${TARGET}" == "watchos-sim-cross"* ]]; then
-      PLATFORM="WatchSimulator"
-      CONFIG_HOST="x86_64-apple-darwin"
-    elif [[ "${TARGET}" == "watchos"* ]]; then
-      PLATFORM="WatchOS"
-      CONFIG_HOST="arm-apple-darwin"
-    fi
+    CONFIG_HOST="arm-apple-darwin"
+
     MIN_SDK_VERSION=${WATCHOS_MIN_SDK_VERSION}
     
     # CFLAGS
     SDK_CFLAGS="-mwatchos-version-min=${WATCHOS_MIN_SDK_VERSION}"
 
-  elif [[ "${TARGET}" == tvos* ]]; then
-    # tvOS cross
-    if [ -z ${TVOS_MIN_SDK_VERSION+x} ]; then
-      TVOS_MIN_SDK_VERSION="12.0"
+    if [[ "${TARGET}" == "watchos-sim-cross"* ]]; then
+      PLATFORM="WatchSimulator"
+
+      if [[ "${TARGET}" == "watchos-sim-cross-arm64" ]]; then
+        SDK_CFLAGS="-target arm64-apple-watchos7.2-simulator -mwatchos-version-min=7.2"
+      fi
+    elif [[ "${TARGET}" == "watchos"* ]]; then
+      PLATFORM="WatchOS"
     fi
 
+  elif [[ "${TARGET}" == tvos* ]]; then
+    # tvOS cross
     if [ ! -n "${TVOS_SDKVERSION}" ]; then
       TVOS_SDKVERSION=$(xcrun -sdk appletvos --show-sdk-version)
     fi
+    
     SDKVERSION="${TVOS_SDKVERSION}"
-    if [[ "${TARGET}" == "tvos-sim-cross-"* ]]; then
-      PLATFORM="AppleTVSimulator"
-      CONFIG_HOST="x86_64-apple-darwin"
-    elif [[ "${TARGET}" == "tvos64-cross-"* ]]; then
-      PLATFORM="AppleTVOS"
-      CONFIG_HOST="arm-apple-darwin"
-    fi
+    CONFIG_HOST="arm-apple-darwin"
+
     MIN_SDK_VERSION=${TVOS_MIN_SDK_VERSION}
     
     # CFLAGS
     SDK_CFLAGS="-mtvos-version-min=${TVOS_MIN_SDK_VERSION}"
 
-  else
-    ## Apple iOS
-    if [ -z ${IOS_MIN_SDK_VERSION+x} ]; then
-      IOS_MIN_SDK_VERSION="12.0"
+    if [[ "${TARGET}" == "tvos-sim-cross-"* ]]; then
+      PLATFORM="AppleTVSimulator"
+
+      if [[ "${TARGET}" == "tvos-sim-cross-arm64" ]]; then
+        SDK_CFLAGS+=" -target arm64-apple-tvos12.0-simulator"
+      fi
+    elif [[ "${TARGET}" == "tvos-cross-"* ]]; then
+      PLATFORM="AppleTVOS"
     fi
 
+  elif [[ "${TARGET}" == xros* ]]; then
+    # XROS cross
+    if [ ! -n "${XROS_SDKVERSION}" ]; then
+      XROS_SDKVERSION=$(xcrun -sdk xros --show-sdk-version)
+    fi
+
+    SDKVERSION="${XROS_SDKVERSION}"
+    CONFIG_HOST="arm-apple-darwin"
+
+    if [[ "${TARGET}" == "xros-sim-cross-"* ]]; then
+      PLATFORM="XRSimulator"
+    elif [[ "${TARGET}" == "xros-cross-"* ]]; then
+      PLATFORM="XROS"
+    fi
+
+    # MIN_SDK_VERSION=${XROS_MIN_SDK_VERSION}
+    
+    # CFLAGS
+    # SDK_CFLAGS="-mxros-version-min=${XROS_MIN_SDK_VERSION}"
+
+  else
+    ## Apple iOS
     if [ ! -n "${IOS_SDKVERSION}" ]; then
       IOS_SDKVERSION=$(xcrun -sdk iphoneos --show-sdk-version)
     fi
+
     SDKVERSION="${IOS_SDKVERSION}"
+    CONFIG_HOST="arm-apple-darwin"
+
     if [[ "${TARGET}" == "ios-sim-cross-"* ]]; then
       PLATFORM="iPhoneSimulator"
-      CONFIG_HOST="x86_64-apple-darwin"
     else
       PLATFORM="iPhoneOS"
-      CONFIG_HOST="arm-apple-darwin"
     fi
+    
     MIN_SDK_VERSION=${IOS_MIN_SDK_VERSION}
 
     # CFLAGS
@@ -276,7 +323,7 @@ function generate_apple_envs() {
 
     # Simulator (arm64)
     if [[ "${TARGET}" == "ios-sim-cross-arm64" ]]; then
-      SDK_CFLAGS="${SDK_CFLAGS} -target arm64-apple-ios13.0-simulator -mios-version-min=13.0"
+      SDK_CFLAGS+=" -target arm64-apple-ios14.0-simulator -mios-version-min=14.0"
     fi
   fi
 
@@ -291,7 +338,7 @@ function generate_apple_envs() {
     PLATFORM="Catalyst"
   fi
 
-  SDK_CFLAGS="-isysroot ${CROSS_TOP}/SDKs/${CROSS_SDK} -fno-common -fembed-bitcode -arch ${ARCH} ${SDK_CFLAGS}"
+  SDK_CFLAGS="-isysroot ${CROSS_TOP}/SDKs/${CROSS_SDK} -fno-common -arch ${ARCH} ${SDK_CFLAGS}"
 }
 
 # Validate Xcode Developer path
@@ -312,15 +359,6 @@ case "${DEVELOPER}" in
   ;;
 esac
 
-# Default (=full) set of targets
-DEFAULTTARGETS=`cat <<TARGETS
-ios-sim-cross-x86_64 ios-sim-cross-arm64 ios64-cross-arm64 ios64-cross-arm64e
-macos64-x86_64 macos64-arm64
-mac-catalyst-x86_64 mac-catalyst-arm64
-watchos-cross-armv7k watchos-cross-arm64_32 watchos-sim-cross-x86_64
-tvos-sim-cross-x86_64 tvos64-cross-arm64
-TARGETS`
-
 # Init optional command line vars
 ARCHS=""
 CLEANUP=""
@@ -329,6 +367,7 @@ MACOS_SDKVERSION=""
 CATALYST_SDKVERSION=""
 WATCHOS_SDKVERSION=""
 TVOS_SDKVERSION=""
+XROS_SDKVERSION=""
 LOG_VERBOSE=""
 TARGETS=""
 
@@ -378,6 +417,10 @@ case $i in
     ;;
   --min-tvos-sdk=*)
     TVOS_MIN_SDK_VERSION="${i#*=}"
+    shift
+    ;;
+  --min-xros-sdk=*)
+    XROS_MIN_SDK_VERSION="${i#*=}"
     shift
     ;;
   --targets=*)

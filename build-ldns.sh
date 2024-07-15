@@ -25,7 +25,7 @@ set -u
 # SCRIPT DEFAULTS
 
 # Default version in case no version is specified
-DEFAULTVERSION="1.7.1"
+DEFAULTVERSION="1.8.3"
 VERSION=
 PARALLEL=
 
@@ -75,8 +75,8 @@ cleanup_build()
   if [ -d "${CURRENTPATH}/build/bin" ]; then
     rm -rfd "${CURRENTPATH}/build/bin"
   fi
-  if [ -d "${CURRENTPATH}/build/include/ldns" ]; then
-    rm -rfd "${CURRENTPATH}/build/include/ldns"
+  if [ -d "${CURRENTPATH}/build/include" ]; then
+    rm -rfd "${CURRENTPATH}/build/include"
   fi
   if [ -d "${CURRENTPATH}/build/lib" ]; then
     rm -rfd "${CURRENTPATH}/build/lib"
@@ -103,9 +103,8 @@ prepare_target_source_dirs()
   # Prepare source dir
   SOURCEDIR="${CURRENTPATH}/build/src/${PLATFORM}-${ARCH}"
   mkdir -p "${SOURCEDIR}"
-  # tar zxf "${CURRENTPATH}/${LDNS_ARCHIVE_FILE_NAME}" -C "${SOURCEDIR}"
-  cp -R ${CURRENTPATH}/ldns ${SOURCEDIR}
-  cd "${SOURCEDIR}/ldns"
+  tar zxf "${CURRENTPATH}/${LDNS_ARCHIVE_FILE_NAME}" -C "${SOURCEDIR}"
+  cd "${SOURCEDIR}/${LDNS_ARCHIVE_BASE_NAME}"
   chmod u+x ./configure
 }
 
@@ -116,7 +115,7 @@ run_configure()
   # Add build target, --prefix and prevent async (references to getcontext(),
   # setcontext() and makecontext() result in App Store rejections) and creation
   # of shared libraries (default since 1.1.0)
-  local SSL_PATH="${CURRENTPATH}/build/openssl/${PLATFORM}${SDKVERSION}-${ARCH}.sdk"
+  local SSL_PATH="${HOME}/workspace/CodinnCode/OpenSSL/bin/${PLATFORM}${SDKVERSION}-${ARCH}.sdk"
   local LOCAL_CONFIG_OPTIONS="--host=${CONFIG_HOST} --prefix=${TARGETDIR} --without-xcode-sdk --disable-shared --without-drill --disable-gost --without-examples --without-pyldns --with-ssl=${SSL_PATH} ${CONFIG_OPTIONS}"
 
   echo "  Configure..."
@@ -206,30 +205,30 @@ echo "  Build location: ${CURRENTPATH}"
 echo
 
 # # Download LDNS when not present
-# LDNS_ARCHIVE_BASE_NAME="ldns-${VERSION}"
-# LDNS_ARCHIVE_FILE_NAME="${LDNS_ARCHIVE_BASE_NAME}.tar.gz"
-# if [ ! -e ${LDNS_ARCHIVE_FILE_NAME} ]; then
-#   echo "Downloading ${LDNS_ARCHIVE_FILE_NAME}..."
-#   LDNS_ARCHIVE_URL="https://nlnetlabs.nl/downloads/ldns/${LDNS_ARCHIVE_FILE_NAME}"
+LDNS_ARCHIVE_BASE_NAME="ldns-${VERSION}"
+LDNS_ARCHIVE_FILE_NAME="${LDNS_ARCHIVE_BASE_NAME}.tar.gz"
+if [ ! -e ${LDNS_ARCHIVE_FILE_NAME} ]; then
+  echo "Downloading ${LDNS_ARCHIVE_FILE_NAME}..."
+  LDNS_ARCHIVE_URL="https://nlnetlabs.nl/downloads/ldns/${LDNS_ARCHIVE_FILE_NAME}"
 
-#   # Check whether file exists here (this is the location of the latest version for each branch)
-#   # -s be silent, -f return non-zero exit status on failure, -I get header (do not download)
-#   curl ${CURL_OPTIONS} -sfI "${LDNS_ARCHIVE_URL}" > /dev/null
+  # Check whether file exists here (this is the location of the latest version for each branch)
+  # -s be silent, -f return non-zero exit status on failure, -I get header (do not download)
+  curl ${CURL_OPTIONS} -sfI "${LDNS_ARCHIVE_URL}" > /dev/null
 
-#   # Both attempts failed, so report the error
-#   if [ $? -ne 0 ]; then
-#     echo "An error occurred trying to find LDNS ${VERSION} on ${LDNS_ARCHIVE_URL}"
-#     echo "Please verify that the version you are trying to build exists, check cURL's error message and/or your network connection."
-#     exit 1
-#   fi
+  # Both attempts failed, so report the error
+  if [ $? -ne 0 ]; then
+    echo "An error occurred trying to find LDNS ${VERSION} on ${LDNS_ARCHIVE_URL}"
+    echo "Please verify that the version you are trying to build exists, check cURL's error message and/or your network connection."
+    exit 1
+  fi
 
-#   # Archive was found, so proceed with download.
-#   # -O Use server-specified filename for download
-#   curl ${CURL_OPTIONS} -O "${LDNS_ARCHIVE_URL}"
+  # Archive was found, so proceed with download.
+  # -O Use server-specified filename for download
+  curl ${CURL_OPTIONS} -O "${LDNS_ARCHIVE_URL}"
 
-# else
-#   echo "Using ${LDNS_ARCHIVE_FILE_NAME}"
-# fi
+else
+  echo "Using ${LDNS_ARCHIVE_FILE_NAME}"
+fi
 
 # -e  Abort script at first error, when a command exits with non-zero status (except in until or while loops, if-tests, list constructs)
 # -o pipefail  Causes a pipeline to return the exit status of the last command in the pipe that returned a non-zero return value
@@ -237,6 +236,7 @@ set -eo pipefail
 
 # (Re-)create target directories
 mkdir -p "${CURRENTPATH}/build/bin"
+mkdir -p "${CURRENTPATH}/build/include"
 mkdir -p "${CURRENTPATH}/build/lib"
 mkdir -p "${CURRENTPATH}/build/src"
 

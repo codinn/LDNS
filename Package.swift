@@ -6,29 +6,24 @@ import PackageDescription
 let package = Package(
     name: "LDNS",
     products: [
-        // openssl.xcframework
+        // ldns.xcframework
         .library(
-            name: "ldns",
-            targets: ["ldns"]),
+            name: "libldns",
+            targets: ["libldns"]),
         // LDNS libray, can be imported by swift
         .library(
             name: "LDNS",
-            targets: ["LDNS", "ldns"]),
+            targets: ["LDNS", "libldns"]),
     ],
     dependencies: [
     ],
     targets: [
         .binaryTarget(
-            name: "ldns",
-            url: "https://codinn.com/download/ldns-1.7.1.xcframework.zip",
-            checksum: "44f43e8b5fc9e89f598da9ae4bbc4ec916393f622c57568cfb81d769db88b22c"
+            name: "libldns",
+            url: "https://github.com/codinn/LDNS/releases/download/1.8.3/ldns.xcframework.zip",
+            checksum: "efa73c7475273e9019bbe71399b0e05e1f2b6a3e18589ea807c33689c05fb196"
         ),
         .target(name: "LDNS",
-                dependencies: ["ldns"])
+                dependencies: ["libldns"])
     ]
 )
-
-/* 
-xcframework successfully written out to: frameworks/ldns.xcframework
-44f43e8b5fc9e89f598da9ae4bbc4ec916393f622c57568cfb81d769db88b22c
-*/
