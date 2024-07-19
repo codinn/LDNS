@@ -25,7 +25,7 @@ DEFAULTTARGETS=`cat <<TARGETS
 ios-sim-cross-x86_64 ios-sim-cross-arm64 ios64-cross-arm64 ios64-cross-arm64e
 macos64-x86_64 macos64-arm64
 mac-catalyst-x86_64 mac-catalyst-arm64
-watchos-cross-armv7k watchos-cross-arm64_32 watchos-sim-cross-x86_64 watchos-sim-cross-i386 watchos-sim-cross-arm64
+watchos-cross-arm64_32 watchos-sim-cross-x86_64 watchos-sim-cross-arm64
 tvos-sim-cross-x86_64 tvos-sim-cross-arm64 tvos-cross-arm64
 xros-sim-cross-arm64 xros-cross-arm64
 TARGETS`

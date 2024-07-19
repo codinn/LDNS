@@ -75,12 +75,6 @@ cleanup_build()
   if [ -d "${CURRENTPATH}/build/bin" ]; then
     rm -rfd "${CURRENTPATH}/build/bin"
   fi
-  if [ -d "${CURRENTPATH}/build/include" ]; then
-    rm -rfd "${CURRENTPATH}/build/include"
-  fi
-  if [ -d "${CURRENTPATH}/build/lib" ]; then
-    rm -rfd "${CURRENTPATH}/build/lib"
-  fi
   if [ -d "${CURRENTPATH}/build/src" ]; then
     rm -rfd "${CURRENTPATH}/build/src"
   fi
@@ -164,18 +158,6 @@ finish_build_loop()
   # Return to ${CURRENTPATH} and remove source dir
   cd "${CURRENTPATH}"
   rm -r "${SOURCEDIR}"
-
-  LDNSCONF_SUFFIX="${PLATFORM}_${ARCH}"
-
-  # Copy common.h to bin directory and add to array
-  LDNSCONF="common_${LDNSCONF_SUFFIX}.h"
-  cp "${TARGETDIR}/include/ldns/common.h" "${CURRENTPATH}/build/bin/${LDNSCONF}"
-  LDNSCONF_ALL+=("${LDNSCONF}")
-
-  # Keep reference to first build target for include file
-  if [ -z "${INCLUDE_DIR}" ]; then
-    INCLUDE_DIR="${TARGETDIR}/include/ldns"
-  fi
 }
 
 # Determine script directory
@@ -236,56 +218,8 @@ set -eo pipefail
 
 # (Re-)create target directories
 mkdir -p "${CURRENTPATH}/build/bin"
-mkdir -p "${CURRENTPATH}/build/include"
-mkdir -p "${CURRENTPATH}/build/lib"
 mkdir -p "${CURRENTPATH}/build/src"
 
-# Init vars for library references
-INCLUDE_DIR=""
-LDNSCONF_ALL=()
-
 bootstrap
-
-source "${SCRIPTDIR}/apple-config.sh"
-
-# Copy include directory
-cp -R "${INCLUDE_DIR}" "${CURRENTPATH}/build/include/"
-
-# Only create intermediate file when building for multiple targets
-# For a single target, common.h is still present in $INCLUDE_DIR (and has just been copied to the target include dir)
-if [ ${#LDNSCONF_ALL[@]} -gt 1 ]; then
-
-  # Prepare intermediate header file
-  # This overwrites common.h that was copied from $INCLUDE_DIR
-  LDNSCONF_INTERMEDIATE="${CURRENTPATH}/build/include/ldns/common.h"
-  cp "${CURRENTPATH}/common-template.h" "${LDNSCONF_INTERMEDIATE}"
-
-  # Loop all header files
-  LOOPCOUNT=0
-  for LDNSCONF_CURRENT in "${LDNSCONF_ALL[@]}" ; do
-
-    # Copy specific common file to include dir
-    cp "${CURRENTPATH}/build/bin/${LDNSCONF_CURRENT}" "${CURRENTPATH}/build/include/ldns"
-
-    # Determine define condition
-    define_condition ${LDNSCONF_CURRENT}
-
-    # Determine loopcount; start with if and continue with elif
-    LOOPCOUNT=$((LOOPCOUNT + 1))
-    if [ ${LOOPCOUNT} -eq 1 ]; then
-      echo "#if ${DEFINE_CONDITION}" >> "${LDNSCONF_INTERMEDIATE}"
-    else
-      echo "#elif ${DEFINE_CONDITION}" >> "${LDNSCONF_INTERMEDIATE}"
-    fi
-
-    # Add include
-    echo "# include <ldns/${LDNSCONF_CURRENT}>" >> "${LDNSCONF_INTERMEDIATE}"
-  done
-
-  # Finish
-  echo "#else" >> "${LDNSCONF_INTERMEDIATE}"
-  echo '# error Unable to determine target or target not included in LDNS build' >> "${LDNSCONF_INTERMEDIATE}"
-  echo "#endif" >> "${LDNSCONF_INTERMEDIATE}"
-fi
 
 echo "Done."

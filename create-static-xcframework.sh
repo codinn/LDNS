@@ -7,7 +7,7 @@ if [ $# == 0 ]; then
     exit 1
 fi
 
-if [ ! -d build/lib ]; then
+if [ ! -d build/bin ]; then
     echo "Please run build-ldns.sh first!"
     exit 1
 fi
@@ -17,10 +17,9 @@ FWNAME=ldns
 FWROOT=build/frameworks
 LIBNAME=ldns
 ARGS=
-XCFRAMEWORK_DEPS=
 
 if [ $BUILD_TYPE == "full" ]; then
-    ALL_SYSTEMS=("iPhoneOS" "iPhoneSimulator" "AppleTVOS" "AppleTVSimulator" "MacOSX" "Catalyst" "WatchOS" "WatchSimulator")
+    ALL_SYSTEMS=("iPhoneOS" "iPhoneSimulator" "AppleTVOS" "AppleTVSimulator" "MacOSX" "Catalyst" "WatchOS" "WatchSimulator" "XROS" "XRSimulator")
 else
     ALL_SYSTEMS=("iPhoneOS" "iPhoneSimulator" "MacOSX")
 fi
@@ -39,11 +38,11 @@ for SYS in ${ALL_SYSTEMS[@]}; do
 	mkdir -p $SYSDIR
     for DIST in ${SYSDISTS[@]}; do
     	LIPO_LIBS+=" $DIST/lib/libldns.a"
+        ditto "$DIST/include" "$SYSDIR/include"
     done
 
 	lipo ${LIPO_LIBS} -create -output $SYSDIR/libldns.a
-	ARGS+=" -library $SYSDIR/libldns.a -headers build/include/"
-	XCFRAMEWORK_DEPS+=" $SYSDIR/libldns.a"
+	ARGS+=" -library $SYSDIR/libldns.a -headers $SYSDIR/include/"
 done
 
 echo "Creating xcframework"
