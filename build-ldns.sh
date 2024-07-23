@@ -109,7 +109,8 @@ run_configure()
   # Add build target, --prefix and prevent async (references to getcontext(),
   # setcontext() and makecontext() result in App Store rejections) and creation
   # of shared libraries (default since 1.1.0)
-  local SSL_PATH="${HOME}/workspace/CodinnCode/OpenSSL/bin/${PLATFORM}${SDKVERSION}-${ARCH}.sdk"
+  source "${CURRENTPATH}/local-config.sh"
+
   local LOCAL_CONFIG_OPTIONS="--host=${CONFIG_HOST} --prefix=${TARGETDIR} --without-xcode-sdk --disable-shared --without-drill --disable-gost --without-examples --without-pyldns --with-ssl=${SSL_PATH} ${CONFIG_OPTIONS}"
 
   echo "  Configure..."

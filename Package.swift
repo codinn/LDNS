@@ -20,8 +20,8 @@ let package = Package(
     targets: [
         .binaryTarget(
             name: "libldns",
-            url: "https://github.com/codinn/LDNS/releases/download/1.8.3/ldns.xcframework.zip",
-            checksum: "9855b0ca0e1d0ec1ed1b7ccb910cc133f9fc23f6aaf13c25879d0d4f9a408dcf"
+            url: "https://github.com/codinn/LDNS/releases/download/1.8.3-p1/ldns.xcframework.zip",
+            checksum: "4ede5085dbcb1dc0402d58eb42b15db8190810d9a87f1f9017e7c389aff48abc"
         ),
         .target(name: "LDNS",
                 dependencies: ["libldns"])
